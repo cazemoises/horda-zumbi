@@ -116,3 +116,23 @@ func TestHandler_BroadcastsToAllOtherClientsInRoom(t *testing.T) {
 		t.Errorf("carol received %q, want %q", got, "hi all")
 	}
 }
+
+func TestHandler_RejectsFourthClientWhenRoomFull(t *testing.T) {
+	server, _ := newTestServer(t)
+
+	dialRoom(t, server, "ROOM3")
+	dialRoom(t, server, "ROOM3")
+	dialRoom(t, server, "ROOM3")
+
+	fourth := dialRoom(t, server, "ROOM3")
+
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+	_, _, err := fourth.Read(ctx)
+	if err == nil {
+		t.Fatal("expected fourth client's connection to be closed, got nil error")
+	}
+	if status := websocket.CloseStatus(err); status != websocket.StatusPolicyViolation {
+		t.Errorf("close status = %v, want %v", status, websocket.StatusPolicyViolation)
+	}
+}
