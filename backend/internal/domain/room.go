@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"math"
+	"strconv"
 )
 
 // ErrRoomFull is returned when attempting to add a player to a full room.
@@ -22,14 +23,18 @@ const (
 
 // MaxPlayersPerRoom is the maximum number of concurrent players in a room.
 const MaxPlayersPerRoom = 3
+const ZombieSpawnIntervalTicks = 90
+const MaxActiveZombies = 50
 
 // Room groups the players and zombies sharing one match.
 type Room struct {
-	Code    string
-	Players map[PlayerID]*Player
-	Zombies map[ZombieID]*Zombie
-	Wave    int
-	State   RoomState
+	Code         string
+	Players      map[PlayerID]*Player
+	Zombies      map[ZombieID]*Zombie
+	Wave         int
+	State        RoomState
+	ticks        int
+	nextZombieID int
 }
 
 // NewRoom creates an empty room waiting for players.
@@ -85,6 +90,12 @@ func (r *Room) SpawnZombie(id ZombieID, x, y, speed float64) (*Zombie, error) {
 // Tick moves every active zombie toward its nearest player.
 func (r *Room) Tick() bool {
 	changed := false
+	r.ticks++
+	if r.ticks%ZombieSpawnIntervalTicks == 0 && len(r.Zombies) < MaxActiveZombies {
+		if r.spawnWaveZombie() {
+			changed = true
+		}
+	}
 	for _, zombie := range r.Zombies {
 		target := nearestPlayer(zombie, r.Players)
 		if target != nil && zombie.MoveTowards(target) {
@@ -92,6 +103,27 @@ func (r *Room) Tick() bool {
 		}
 	}
 	return changed
+}
+
+func (r *Room) spawnWaveZombie() bool {
+	positions := [][2]float64{{400, 0}, {-400, 0}, {0, 300}, {0, -300}}
+	position := positions[r.nextZombieID%len(positions)]
+	for _, player := range r.Players {
+		if player.X == position[0] && player.Y == position[1] {
+			position[0] += 1
+			position[1] += 1
+			break
+		}
+	}
+	for {
+		r.nextZombieID++
+		id := ZombieID("z" + strconv.Itoa(r.nextZombieID))
+		if _, exists := r.Zombies[id]; exists {
+			continue
+		}
+		_, err := r.SpawnZombie(id, position[0], position[1], 1)
+		return err == nil
+	}
 }
 
 func nearestPlayer(zombie *Zombie, players map[PlayerID]*Player) *Player {
