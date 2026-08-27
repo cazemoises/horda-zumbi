@@ -80,9 +80,11 @@ func (h *Hub) Join(code string, id ports.ClientID, conn *websocket.Conn, name st
 	return nil
 }
 
-// Leave removes client id from the room identified by code. If the room
-// becomes empty, it is dropped from both the hub and the room repository -
-// there is no persistence across restarts or empty rooms.
+// Leave removes client id from the room identified by code and its
+// domain.Player from the domain.Room, then notifies the remaining clients
+// with a "player_left" event. If the room becomes empty, it is dropped from
+// both the hub and the room repository - there is no persistence across
+// restarts or empty rooms.
 func (h *Hub) Leave(code string, id ports.ClientID) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -93,6 +95,18 @@ func (h *Hub) Leave(code string, id ports.ClientID) {
 	}
 
 	delete(clients, id)
+
+	if room, ok := h.roomRepo.Get(code); ok {
+		room.RemovePlayer(domain.PlayerID(id))
+	}
+
+	if len(clients) > 0 {
+		if payload, err := json.Marshal(playerLeftMessage{Type: "player_left", PlayerID: string(id)}); err == nil {
+			for _, c := range clients {
+				writeRaw(c, payload)
+			}
+		}
+	}
 
 	if len(clients) == 0 {
 		delete(h.rooms, code)
