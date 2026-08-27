@@ -241,6 +241,30 @@ func TestHandler_RejectsJoinWithInvalidCharacter(t *testing.T) {
 	expectPlayerJoined(t, bob, "")
 }
 
+func TestHandler_BroadcastsPlayerLeftOnDisconnect(t *testing.T) {
+	server, _ := newTestServer(t)
+
+	alice := dialRoom(t, server, "ROOM8")
+	joinRoom(t, alice, "Alice", domain.CharacterTank)
+	bob := dialRoom(t, server, "ROOM8")
+	bobJoined := joinRoom(t, bob, "Bob", domain.CharacterMedic)
+	expectPlayerJoined(t, alice, bobJoined.PlayerID)
+
+	bob.Close(websocket.StatusNormalClosure, "")
+
+	raw := readMessage(t, alice)
+	var left playerLeftMessage
+	if err := json.Unmarshal(raw, &left); err != nil {
+		t.Fatalf("unmarshal player_left message: %v (raw=%s)", err, raw)
+	}
+	if left.Type != "player_left" {
+		t.Fatalf("expected player_left message, got %q (raw=%s)", left.Type, raw)
+	}
+	if left.PlayerID != bobJoined.PlayerID {
+		t.Errorf("player_left id = %q, want %q", left.PlayerID, bobJoined.PlayerID)
+	}
+}
+
 func TestHandler_BroadcastsToOtherClientButNotSender(t *testing.T) {
 	server, _ := newTestServer(t)
 
