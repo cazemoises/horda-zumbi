@@ -136,3 +136,22 @@ func TestHandler_RejectsFourthClientWhenRoomFull(t *testing.T) {
 		t.Errorf("close status = %v, want %v", status, websocket.StatusPolicyViolation)
 	}
 }
+
+func TestHandler_DoesNotLeakMessagesBetweenRooms(t *testing.T) {
+	server, _ := newTestServer(t)
+
+	aliceInAAAA := dialRoom(t, server, "AAAA")
+	carolInAAAA := dialRoom(t, server, "AAAA")
+	bobInBBBB := dialRoom(t, server, "BBBB")
+
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+	if err := aliceInAAAA.Write(ctx, websocket.MessageText, []byte("only for AAAA")); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	if got := readMessage(t, carolInAAAA); string(got) != "only for AAAA" {
+		t.Errorf("carol (same room) received %q, want %q", got, "only for AAAA")
+	}
+	assertNoMessage(t, bobInBBBB)
+}
