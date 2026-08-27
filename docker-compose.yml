@@ -1,0 +1,37 @@
+# Brings up the horda-zumbi stack: backend (Go, in-memory rooms only - no
+# persistence) and frontend (nginx-served React build proxying /ws and
+# /health to the backend). No database, no volumes: all game state lives in
+# the backend process and is lost on restart, by design.
+services:
+  backend:
+    build: ./backend
+    environment:
+      PORT: "8080"
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    networks:
+      - horda-zumbi-net
+    # No Docker healthcheck here: the runtime image is
+    # gcr.io/distroless/static-debian12, which has no shell or wget/curl by
+    # design (minimal attack surface), so a CMD-based healthcheck can't run
+    # inside the container. GET /health is still reachable from the
+    # host/other containers via the published port.
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-8081}:80"
+    depends_on:
+      backend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - horda-zumbi-net
+
+networks:
+  horda-zumbi-net:
+    driver: bridge
