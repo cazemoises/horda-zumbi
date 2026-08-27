@@ -372,6 +372,29 @@ func waitForCondition(t *testing.T, timeout time.Duration, condition func() bool
 	}
 }
 
+func TestHandler_ProcessesMovementInput(t *testing.T) {
+	server, roomRepo := newTestServer(t)
+
+	conn := dialRoom(t, server, "MOVE1")
+	resp := joinRoom(t, conn, "Alice", domain.CharacterTank)
+
+	payload := []byte(`{"type":"move","dx":1,"dy":-1}`)
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+	if err := conn.Write(ctx, websocket.MessageText, payload); err != nil {
+		t.Fatalf("write movement: %v", err)
+	}
+
+	waitForCondition(t, testTimeout, func() bool {
+		room, ok := roomRepo.Get("MOVE1")
+		if !ok {
+			return false
+		}
+		player := room.Players[domain.PlayerID(resp.PlayerID)]
+		return player != nil && player.X == 1 && player.Y == -1
+	})
+}
+
 func TestHandler_RemovesRoomFromRepositoryWhenAllClientsLeave(t *testing.T) {
 	server, roomRepo := newTestServer(t)
 

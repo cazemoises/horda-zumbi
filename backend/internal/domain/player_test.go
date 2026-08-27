@@ -62,3 +62,23 @@ func TestPlayer_IsDead(t *testing.T) {
 		t.Error("player at 0 health should be dead")
 	}
 }
+
+func TestPlayer_Move_UpdatesPositionByVector(t *testing.T) {
+	p, _ := NewPlayer(PlayerID("p1"), "Alice", CharacterTank)
+
+	p.Move(1, -1)
+
+	if p.X != 1 || p.Y != -1 {
+		t.Errorf("position = (%v, %v), want (1, -1)", p.X, p.Y)
+	}
+}
+
+func TestPlayer_Move_ClampsInputToUnitVector(t *testing.T) {
+	p, _ := NewPlayer(PlayerID("p1"), "Alice", CharacterTank)
+
+	p.Move(10, -10)
+
+	if p.X != 1 || p.Y != -1 {
+		t.Errorf("position = (%v, %v), want (1, -1)", p.X, p.Y)
+	}
+}
