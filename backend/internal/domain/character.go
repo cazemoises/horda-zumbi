@@ -24,3 +24,13 @@ var Characters = []Character{
 	{ID: CharacterMedic, Name: "Médico", Ability: "Cura aliados próximos (placeholder)"},
 	{ID: CharacterScout, Name: "Batedor", Ability: "Velocidade de movimento aumentada (placeholder)"},
 }
+
+// IsValidCharacterID reports whether id matches one of the fixed playable characters.
+func IsValidCharacterID(id CharacterID) bool {
+	for _, c := range Characters {
+		if c.ID == id {
+			return true
+		}
+	}
+	return false
+}
