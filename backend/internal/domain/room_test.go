@@ -68,3 +68,23 @@ func TestRoom_AddPlayer_RejectsDuplicateID(t *testing.T) {
 		t.Error("expected error adding player with duplicate ID, got nil")
 	}
 }
+
+func TestRoom_RemovePlayer_RemovesExisting(t *testing.T) {
+	r := NewRoom("ABCD")
+	p, _ := NewPlayer(PlayerID("p1"), "Alice", CharacterTank)
+	_ = r.AddPlayer(p)
+
+	r.RemovePlayer(p.ID)
+
+	if _, exists := r.Players[p.ID]; exists {
+		t.Error("player should have been removed from the room")
+	}
+}
+
+func TestRoom_RemovePlayer_IdempotentWhenAbsent(t *testing.T) {
+	r := NewRoom("ABCD")
+	r.RemovePlayer(PlayerID("does-not-exist"))
+	if len(r.Players) != 0 {
+		t.Error("removing an absent player should not error or change state")
+	}
+}

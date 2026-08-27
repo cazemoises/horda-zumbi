@@ -55,3 +55,9 @@ func (r *Room) AddPlayer(p *Player) error {
 	r.Players[p.ID] = p
 	return nil
 }
+
+// RemovePlayer removes the player with the given ID from the room, if present.
+// Removing an ID that is not in the room is a no-op.
+func (r *Room) RemovePlayer(id PlayerID) {
+	delete(r.Players, id)
+}
