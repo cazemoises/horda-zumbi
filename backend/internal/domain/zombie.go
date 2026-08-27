@@ -13,6 +13,7 @@ type Zombie struct {
 	ID     ZombieID
 	X, Y   float64
 	Health int
+	Speed  float64
 	Target PlayerID
 }
 
@@ -29,7 +30,24 @@ func NewZombie(id ZombieID, x, y float64) (*Zombie, error) {
 		X:      x,
 		Y:      y,
 		Health: 50,
+		Speed:  1,
 	}, nil
+}
+
+// MoveTowards advances the zombie toward the player's current position.
+func (z *Zombie) MoveTowards(player *Player) bool {
+	dx := player.X - z.X
+	dy := player.Y - z.Y
+	distance := math.Hypot(dx, dy)
+	z.Target = player.ID
+	if distance == 0 || z.Speed <= 0 {
+		return false
+	}
+
+	distanceMoved := math.Min(z.Speed, distance)
+	z.X += dx / distance * distanceMoved
+	z.Y += dy / distance * distanceMoved
+	return true
 }
 
 func isFinite(v float64) bool {

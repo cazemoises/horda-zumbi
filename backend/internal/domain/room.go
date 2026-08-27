@@ -1,6 +1,9 @@
 package domain
 
-import "errors"
+import (
+	"errors"
+	"math"
+)
 
 // ErrRoomFull is returned when attempting to add a player to a full room.
 var ErrRoomFull = errors.New("room is full")
@@ -60,4 +63,46 @@ func (r *Room) AddPlayer(p *Player) error {
 // Removing an ID that is not in the room is a no-op.
 func (r *Room) RemovePlayer(id PlayerID) {
 	delete(r.Players, id)
+}
+
+// SpawnZombie creates and adds a zombie at the given position.
+func (r *Room) SpawnZombie(id ZombieID, x, y, speed float64) (*Zombie, error) {
+	if math.IsNaN(speed) || math.IsInf(speed, 0) || speed < 0 {
+		return nil, errors.New("zombie speed must be finite and non-negative")
+	}
+	if _, exists := r.Zombies[id]; exists {
+		return nil, errors.New("zombie already in room")
+	}
+	zombie, err := NewZombie(id, x, y)
+	if err != nil {
+		return nil, err
+	}
+	zombie.Speed = speed
+	r.Zombies[id] = zombie
+	return zombie, nil
+}
+
+// Tick moves every active zombie toward its nearest player.
+func (r *Room) Tick() bool {
+	changed := false
+	for _, zombie := range r.Zombies {
+		target := nearestPlayer(zombie, r.Players)
+		if target != nil && zombie.MoveTowards(target) {
+			changed = true
+		}
+	}
+	return changed
+}
+
+func nearestPlayer(zombie *Zombie, players map[PlayerID]*Player) *Player {
+	var nearest *Player
+	nearestDistance := math.Inf(1)
+	for _, player := range players {
+		distance := math.Hypot(player.X-zombie.X, player.Y-zombie.Y)
+		if distance < nearestDistance {
+			nearest = player
+			nearestDistance = distance
+		}
+	}
+	return nearest
 }
