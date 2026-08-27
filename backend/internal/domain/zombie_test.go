@@ -112,3 +112,32 @@ func TestRoom_TickTargetsNearestPlayer(t *testing.T) {
 		t.Errorf("zombie target = %q, want %q", zombie.Target, near.ID)
 	}
 }
+
+func TestRoom_TickSpawnsZombieAfterSpawnInterval(t *testing.T) {
+	room := NewRoom("WAVE1")
+
+	for i := 0; i < ZombieSpawnIntervalTicks; i++ {
+		room.Tick()
+	}
+
+	if len(room.Zombies) != 1 {
+		t.Fatalf("zombies = %d, want 1 after %d ticks", len(room.Zombies), ZombieSpawnIntervalTicks)
+	}
+	for _, zombie := range room.Zombies {
+		if math.Abs(zombie.X) < 300 && math.Abs(zombie.Y) < 200 {
+			t.Errorf("zombie spawned away from arena edge at (%v, %v)", zombie.X, zombie.Y)
+		}
+	}
+}
+
+func TestRoom_TickStopsSpawningAtZombieLimit(t *testing.T) {
+	room := NewRoom("WAVE2")
+
+	for i := 0; i < ZombieSpawnIntervalTicks*(MaxActiveZombies+2); i++ {
+		room.Tick()
+	}
+
+	if len(room.Zombies) != MaxActiveZombies {
+		t.Errorf("zombies = %d, want capped at %d", len(room.Zombies), MaxActiveZombies)
+	}
+}
