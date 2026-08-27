@@ -138,6 +138,7 @@ func (h *Hub) runGameLoop(code string, stop <-chan struct{}) {
 	for {
 		select {
 		case <-ticker.C:
+			h.tickRoom(code)
 			payload, clients, version := h.stateUpdate(code)
 			if payload == nil || version == previousVersion {
 				continue
@@ -149,6 +150,16 @@ func (h *Hub) runGameLoop(code string, stop <-chan struct{}) {
 		case <-stop:
 			return
 		}
+	}
+}
+
+func (h *Hub) tickRoom(code string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	room, ok := h.roomRepo.Get(code)
+	if ok && room.Tick() {
+		h.versions[code]++
 	}
 }
 
@@ -165,7 +176,21 @@ func (h *Hub) stateUpdate(code string) ([]byte, []*websocket.Conn, uint64) {
 		players = append(players, newPlayerView(player))
 	}
 	sort.Slice(players, func(i, j int) bool { return players[i].ID < players[j].ID })
-	payload, err := json.Marshal(stateUpdateMessage{Type: "state_update", Players: players})
+	zombies := make([]zombieView, 0, len(room.Zombies))
+	for _, zombie := range room.Zombies {
+		zombies = append(zombies, zombieView{
+			ID:     string(zombie.ID),
+			X:      zombie.X,
+			Y:      zombie.Y,
+			Health: zombie.Health,
+		})
+	}
+	sort.Slice(zombies, func(i, j int) bool { return zombies[i].ID < zombies[j].ID })
+	payload, err := json.Marshal(stateUpdateMessage{
+		Type:    "state_update",
+		Players: players,
+		Zombies: zombies,
+	})
 	if err != nil {
 		return nil, nil, 0
 	}

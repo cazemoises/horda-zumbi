@@ -26,6 +26,13 @@ type playerView struct {
 	Health    int                `json:"health"`
 }
 
+type zombieView struct {
+	ID     string  `json:"id"`
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Health int     `json:"health"`
+}
+
 // roomView is the public snapshot of a domain.Room sent to a client that
 // just joined it.
 type roomView struct {
@@ -59,6 +66,7 @@ type playerLeftMessage struct {
 type stateUpdateMessage struct {
 	Type    string       `json:"type"`
 	Players []playerView `json:"players"`
+	Zombies []zombieView `json:"zombies"`
 }
 
 // errorMessage reports a rejected join to the client that sent it.
