@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 
@@ -34,14 +35,28 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := ports.ClientID(newClientID())
+	ctx := r.Context()
 
-	if !h.hub.Join(code, id, conn) {
-		conn.Close(websocket.StatusPolicyViolation, "room is full")
+	_, raw, err := conn.Read(ctx)
+	if err != nil {
+		conn.Close(websocket.StatusPolicyViolation, "expected join message")
+		return
+	}
+
+	var join joinMessage
+	if err := json.Unmarshal(raw, &join); err != nil || join.Type != "join" {
+		writeJSON(conn, errorMessage{Type: "error", Message: "expected a join message"})
+		conn.Close(websocket.StatusPolicyViolation, "invalid join message")
+		return
+	}
+
+	if err := h.hub.Join(code, id, conn, join.Name, join.Character); err != nil {
+		writeJSON(conn, errorMessage{Type: "error", Message: err.Error()})
+		conn.Close(websocket.StatusPolicyViolation, "join rejected")
 		return
 	}
 	defer h.hub.Leave(code, id)
 
-	ctx := r.Context()
 	for {
 		_, message, err := conn.Read(ctx)
 		if err != nil {
