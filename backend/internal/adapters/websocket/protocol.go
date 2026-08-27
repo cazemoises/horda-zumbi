@@ -9,6 +9,12 @@ type joinMessage struct {
 	Character domain.CharacterID `json:"character"`
 }
 
+type moveMessage struct {
+	Type string `json:"type"`
+	DX   int    `json:"dx"`
+	DY   int    `json:"dy"`
+}
+
 // playerView is the public representation of a domain.Player sent over the
 // wire.
 type playerView struct {

@@ -128,6 +128,22 @@ func (h *Hub) Broadcast(code string, sender ports.ClientID, message []byte) {
 	}
 }
 
+// Move applies a movement input to the player's domain state.
+func (h *Hub) Move(code string, id ports.ClientID, dx, dy int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	room, ok := h.roomRepo.Get(code)
+	if !ok {
+		return
+	}
+	player, ok := room.Players[domain.PlayerID(id)]
+	if !ok {
+		return
+	}
+	player.Move(dx, dy)
+}
+
 // writeRaw sends payload as a text frame to conn, ignoring write errors -
 // a client that can no longer receive messages is cleaned up separately
 // when its own read loop fails.

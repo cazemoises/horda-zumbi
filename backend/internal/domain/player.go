@@ -28,6 +28,7 @@ func NewPlayer(id PlayerID, name string, character CharacterID) (*Player, error)
 	if strings.TrimSpace(name) == "" {
 		return nil, ErrEmptyName
 	}
+
 	if !IsValidCharacterID(character) {
 		return nil, ErrInvalidCharacter
 	}
@@ -37,6 +38,22 @@ func NewPlayer(id PlayerID, name string, character CharacterID) (*Player, error)
 		Health:    100,
 		Character: character,
 	}, nil
+}
+
+// Move updates the player's position by a unit movement vector.
+func (p *Player) Move(dx, dy int) {
+	if dx > 1 {
+		dx = 1
+	} else if dx < -1 {
+		dx = -1
+	}
+	if dy > 1 {
+		dy = 1
+	} else if dy < -1 {
+		dy = -1
+	}
+	p.X += float64(dx)
+	p.Y += float64(dy)
 }
 
 // TakeDamage reduces the player's health by amount, clamped at 0.

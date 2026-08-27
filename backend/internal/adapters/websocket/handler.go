@@ -28,7 +28,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn, err := websocket.Accept(w, r, nil)
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		InsecureSkipVerify: true, // Isso desliga a trava de CORS para testes locais
+	})
 	if err != nil {
 		log.Printf("websocket accept failed for room %s: %v", code, err)
 		return
@@ -62,6 +64,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			conn.Close(websocket.StatusNormalClosure, "")
 			return
+		}
+		var move moveMessage
+		if err := json.Unmarshal(message, &move); err == nil && move.Type == "move" {
+			h.hub.Move(code, id, move.DX, move.DY)
+			continue
 		}
 		h.hub.Broadcast(code, id, message)
 	}
