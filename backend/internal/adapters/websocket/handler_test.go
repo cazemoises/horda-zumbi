@@ -155,3 +155,38 @@ func TestHandler_DoesNotLeakMessagesBetweenRooms(t *testing.T) {
 	}
 	assertNoMessage(t, bobInBBBB)
 }
+
+// waitForCondition polls condition until it is true, failing the test if it
+// is never met within timeout.
+func waitForCondition(t *testing.T, timeout time.Duration, condition func() bool) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for {
+		if condition() {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("condition not met before timeout")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestHandler_RemovesRoomFromRepositoryWhenAllClientsLeave(t *testing.T) {
+	server, roomRepo := newTestServer(t)
+
+	conn := dialRoom(t, server, "ROOM5")
+
+	waitForCondition(t, testTimeout, func() bool {
+		_, ok := roomRepo.Get("ROOM5")
+		return ok
+	})
+
+	conn.Close(websocket.StatusNormalClosure, "")
+
+	waitForCondition(t, testTimeout, func() bool {
+		_, ok := roomRepo.Get("ROOM5")
+		return !ok
+	})
+}
