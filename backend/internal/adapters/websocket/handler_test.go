@@ -429,6 +429,27 @@ func TestHandler_BroadcastsStateUpdateAfterMovement(t *testing.T) {
 	}
 }
 
+func TestHandler_StateUpdateIncludesZombiesArray(t *testing.T) {
+	server, _ := newTestServer(t)
+
+	conn := dialRoom(t, server, "ZOMBIES1")
+	joinRoom(t, conn, "Alice", domain.CharacterTank)
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"move","dx":1,"dy":0}`)); err != nil {
+		t.Fatalf("write movement: %v", err)
+	}
+
+	raw := readMessage(t, conn)
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("unmarshal state update: %v (raw=%s)", err, raw)
+	}
+	if _, ok := payload["zombies"]; !ok {
+		t.Fatalf("state update is missing zombies array (raw=%s)", raw)
+	}
+}
+
 func TestHandler_RemovesRoomFromRepositoryWhenAllClientsLeave(t *testing.T) {
 	server, roomRepo := newTestServer(t)
 

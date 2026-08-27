@@ -13,6 +13,9 @@ func TestNewZombie_ValidInput(t *testing.T) {
 	if z.X != 1.5 || z.Y != -2.5 {
 		t.Errorf("zombie position not set correctly: %+v", z)
 	}
+	if z.Speed <= 0 {
+		t.Errorf("zombie speed = %v, want positive speed", z.Speed)
+	}
 }
 
 func TestNewZombie_RejectsNonFiniteCoordinates(t *testing.T) {
@@ -67,5 +70,45 @@ func TestZombie_IsDead(t *testing.T) {
 	z.TakeDamage(50)
 	if !z.IsDead() {
 		t.Error("zombie at 0 health should be dead")
+	}
+}
+
+func TestRoom_TickMovesZombieTowardNearestPlayer(t *testing.T) {
+	room := NewRoom("ROOM1")
+	player, _ := NewPlayer(PlayerID("p1"), "Alice", CharacterTank)
+	player.X, player.Y = 10, 0
+	if err := room.AddPlayer(player); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := room.SpawnZombie(ZombieID("z1"), 0, 0, 2); err != nil {
+		t.Fatal(err)
+	}
+
+	room.Tick()
+
+	zombie := room.Zombies[ZombieID("z1")]
+	if zombie.X != 2 || zombie.Y != 0 {
+		t.Errorf("zombie position = (%v, %v), want (2, 0)", zombie.X, zombie.Y)
+	}
+}
+
+func TestRoom_TickTargetsNearestPlayer(t *testing.T) {
+	room := NewRoom("ROOM2")
+	near, _ := NewPlayer(PlayerID("near"), "Near", CharacterTank)
+	near.X, near.Y = 3, 0
+	far, _ := NewPlayer(PlayerID("far"), "Far", CharacterMedic)
+	far.X, far.Y = 0, 10
+	_ = room.AddPlayer(near)
+	_ = room.AddPlayer(far)
+	_, _ = room.SpawnZombie(ZombieID("z1"), 0, 0, 1)
+
+	room.Tick()
+
+	zombie := room.Zombies[ZombieID("z1")]
+	if zombie.X != 1 || zombie.Y != 0 {
+		t.Errorf("zombie position = (%v, %v), want (1, 0)", zombie.X, zombie.Y)
+	}
+	if zombie.Target != near.ID {
+		t.Errorf("zombie target = %q, want %q", zombie.Target, near.ID)
 	}
 }
