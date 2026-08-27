@@ -20,8 +20,8 @@ import (
 const writeTimeout = 5 * time.Second
 const tickInterval = 33 * time.Millisecond
 
-// Hub tracks which clients are connected to which rooms and relays
-// messages between them. It implements ports.Broadcaster.
+// Hub tracks connected clients, applies movement input, and runs each room's
+// fixed-rate state update loop. It implements ports.Broadcaster.
 type Hub struct {
 	mu       sync.RWMutex
 	rooms    map[string]map[ports.ClientID]*websocket.Conn
