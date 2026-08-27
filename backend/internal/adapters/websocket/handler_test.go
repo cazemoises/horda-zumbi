@@ -17,6 +17,11 @@ import (
 
 const testTimeout = 2 * time.Second
 
+type testStateUpdateMessage struct {
+	Type    string       `json:"type"`
+	Players []playerView `json:"players"`
+}
+
 // newTestServer starts a real HTTP server exposing the websocket room
 // endpoint, backed by a fresh Hub and in-memory RoomRepository.
 func newTestServer(t *testing.T) (*httptest.Server, *memory.RoomRepository) {
@@ -393,6 +398,35 @@ func TestHandler_ProcessesMovementInput(t *testing.T) {
 		player := room.Players[domain.PlayerID(resp.PlayerID)]
 		return player != nil && player.X == 1 && player.Y == -1
 	})
+}
+
+func TestHandler_BroadcastsStateUpdateAfterMovement(t *testing.T) {
+	server, _ := newTestServer(t)
+
+	conn := dialRoom(t, server, "TICK1")
+	joinRoom(t, conn, "Alice", domain.CharacterTank)
+
+	payload := []byte(`{"type":"move","dx":1,"dy":0}`)
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+	if err := conn.Write(ctx, websocket.MessageText, payload); err != nil {
+		t.Fatalf("write movement: %v", err)
+	}
+
+	raw := readMessage(t, conn)
+	var update testStateUpdateMessage
+	if err := json.Unmarshal(raw, &update); err != nil {
+		t.Fatalf("unmarshal state update: %v (raw=%s)", err, raw)
+	}
+	if update.Type != "state_update" {
+		t.Fatalf("message type = %q, want state_update (raw=%s)", update.Type, raw)
+	}
+	if len(update.Players) != 1 {
+		t.Fatalf("players = %d, want 1", len(update.Players))
+	}
+	if update.Players[0].X != 1 || update.Players[0].Y != 0 {
+		t.Errorf("position = (%v, %v), want (1, 0)", update.Players[0].X, update.Players[0].Y)
+	}
 }
 
 func TestHandler_RemovesRoomFromRepositoryWhenAllClientsLeave(t *testing.T) {
