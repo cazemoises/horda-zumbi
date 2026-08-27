@@ -1,5 +1,13 @@
 package domain
 
+import "errors"
+
+// ErrRoomFull is returned when attempting to add a player to a full room.
+var ErrRoomFull = errors.New("room is full")
+
+// ErrPlayerAlreadyInRoom is returned when a player with the same ID already exists in the room.
+var ErrPlayerAlreadyInRoom = errors.New("player already in room")
+
 // RoomState is the lifecycle stage of a room.
 type RoomState string
 
@@ -34,4 +42,16 @@ func NewRoom(code string) *Room {
 // IsFull reports whether the room has reached MaxPlayersPerRoom.
 func (r *Room) IsFull() bool {
 	return len(r.Players) >= MaxPlayersPerRoom
+}
+
+// AddPlayer adds p to the room, rejecting full rooms and duplicate IDs.
+func (r *Room) AddPlayer(p *Player) error {
+	if r.IsFull() {
+		return ErrRoomFull
+	}
+	if _, exists := r.Players[p.ID]; exists {
+		return ErrPlayerAlreadyInRoom
+	}
+	r.Players[p.ID] = p
+	return nil
 }
