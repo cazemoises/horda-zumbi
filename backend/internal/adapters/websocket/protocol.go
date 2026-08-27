@@ -56,6 +56,11 @@ type playerLeftMessage struct {
 	PlayerID string `json:"player_id"`
 }
 
+type stateUpdateMessage struct {
+	Type    string       `json:"type"`
+	Players []playerView `json:"players"`
+}
+
 // errorMessage reports a rejected join to the client that sent it.
 type errorMessage struct {
 	Type    string `json:"type"`

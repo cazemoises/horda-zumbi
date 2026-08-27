@@ -7,6 +7,7 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"sync"
 	"time"
 
@@ -17,12 +18,15 @@ import (
 )
 
 const writeTimeout = 5 * time.Second
+const tickInterval = 33 * time.Millisecond
 
 // Hub tracks which clients are connected to which rooms and relays
 // messages between them. It implements ports.Broadcaster.
 type Hub struct {
 	mu       sync.RWMutex
 	rooms    map[string]map[ports.ClientID]*websocket.Conn
+	roomLoop map[string]chan struct{}
+	versions map[string]uint64
 	roomRepo ports.RoomRepository
 }
 
@@ -30,6 +34,8 @@ type Hub struct {
 func NewHub(roomRepo ports.RoomRepository) *Hub {
 	return &Hub{
 		rooms:    make(map[string]map[ports.ClientID]*websocket.Conn),
+		roomLoop: make(map[string]chan struct{}),
+		versions: make(map[string]uint64),
 		roomRepo: roomRepo,
 	}
 }
@@ -61,6 +67,11 @@ func (h *Hub) Join(code string, id ports.ClientID, conn *websocket.Conn, name st
 		h.rooms[code] = clients
 	}
 	clients[id] = conn
+	if _, running := h.roomLoop[code]; !running {
+		stop := make(chan struct{})
+		h.roomLoop[code] = stop
+		go h.runGameLoop(code, stop)
+	}
 
 	writeJSON(conn, joinedMessage{
 		Type:     "joined",
@@ -110,8 +121,59 @@ func (h *Hub) Leave(code string, id ports.ClientID) {
 
 	if len(clients) == 0 {
 		delete(h.rooms, code)
+		if stop, ok := h.roomLoop[code]; ok {
+			close(stop)
+			delete(h.roomLoop, code)
+		}
+		delete(h.versions, code)
 		h.roomRepo.Delete(code)
 	}
+}
+
+func (h *Hub) runGameLoop(code string, stop <-chan struct{}) {
+	ticker := time.NewTicker(tickInterval)
+	defer ticker.Stop()
+
+	var previousVersion uint64
+	for {
+		select {
+		case <-ticker.C:
+			payload, clients, version := h.stateUpdate(code)
+			if payload == nil || version == previousVersion {
+				continue
+			}
+			previousVersion = version
+			for _, conn := range clients {
+				writeRaw(conn, payload)
+			}
+		case <-stop:
+			return
+		}
+	}
+}
+
+func (h *Hub) stateUpdate(code string) ([]byte, []*websocket.Conn, uint64) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	room, ok := h.roomRepo.Get(code)
+	if !ok || len(h.rooms[code]) == 0 {
+		return nil, nil, 0
+	}
+	players := make([]playerView, 0, len(room.Players))
+	for _, player := range room.Players {
+		players = append(players, newPlayerView(player))
+	}
+	sort.Slice(players, func(i, j int) bool { return players[i].ID < players[j].ID })
+	payload, err := json.Marshal(stateUpdateMessage{Type: "state_update", Players: players})
+	if err != nil {
+		return nil, nil, 0
+	}
+	clients := make([]*websocket.Conn, 0, len(h.rooms[code]))
+	for _, conn := range h.rooms[code] {
+		clients = append(clients, conn)
+	}
+	return payload, clients, h.versions[code]
 }
 
 // Broadcast relays message to every client in code's room other than
@@ -142,6 +204,7 @@ func (h *Hub) Move(code string, id ports.ClientID, dx, dy int) {
 		return
 	}
 	player.Move(dx, dy)
+	h.versions[code]++
 }
 
 // writeRaw sends payload as a text frame to conn, ignoring write errors -
