@@ -26,3 +26,39 @@ func TestNewPlayer_RejectsInvalidCharacter(t *testing.T) {
 		t.Error("expected error for invalid character ID, got nil")
 	}
 }
+
+func TestPlayer_TakeDamage_ReducesHealth(t *testing.T) {
+	p, _ := NewPlayer(PlayerID("p1"), "Alice", CharacterTank)
+	p.TakeDamage(30)
+	if p.Health != 70 {
+		t.Errorf("Health = %d, want 70", p.Health)
+	}
+}
+
+func TestPlayer_TakeDamage_NeverGoesNegative(t *testing.T) {
+	p, _ := NewPlayer(PlayerID("p1"), "Alice", CharacterTank)
+	p.TakeDamage(1000)
+	if p.Health != 0 {
+		t.Errorf("Health = %d, want 0", p.Health)
+	}
+}
+
+func TestPlayer_TakeDamage_IgnoresNonPositiveAmount(t *testing.T) {
+	p, _ := NewPlayer(PlayerID("p1"), "Alice", CharacterTank)
+	p.TakeDamage(0)
+	p.TakeDamage(-10)
+	if p.Health != 100 {
+		t.Errorf("Health = %d, want 100 (unchanged)", p.Health)
+	}
+}
+
+func TestPlayer_IsDead(t *testing.T) {
+	p, _ := NewPlayer(PlayerID("p1"), "Alice", CharacterTank)
+	if p.IsDead() {
+		t.Error("freshly created player should not be dead")
+	}
+	p.TakeDamage(100)
+	if !p.IsDead() {
+		t.Error("player at 0 health should be dead")
+	}
+}

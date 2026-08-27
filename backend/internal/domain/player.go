@@ -38,3 +38,20 @@ func NewPlayer(id PlayerID, name string, character CharacterID) (*Player, error)
 		Character: character,
 	}, nil
 }
+
+// TakeDamage reduces the player's health by amount, clamped at 0.
+// Non-positive amounts are ignored.
+func (p *Player) TakeDamage(amount int) {
+	if amount <= 0 {
+		return
+	}
+	p.Health -= amount
+	if p.Health < 0 {
+		p.Health = 0
+	}
+}
+
+// IsDead reports whether the player's health has reached 0.
+func (p *Player) IsDead() bool {
+	return p.Health <= 0
+}
