@@ -20,6 +20,7 @@ const testTimeout = 2 * time.Second
 type testStateUpdateMessage struct {
 	Type    string       `json:"type"`
 	Players []playerView `json:"players"`
+	Zombies []zombieView `json:"zombies"`
 }
 
 // newTestServer starts a real HTTP server exposing the websocket room
@@ -447,6 +448,54 @@ func TestHandler_StateUpdateIncludesZombiesArray(t *testing.T) {
 	}
 	if _, ok := payload["zombies"]; !ok {
 		t.Fatalf("state update is missing zombies array (raw=%s)", raw)
+	}
+}
+
+func TestHandler_ProcessesAttackAndMarksDeadZombie(t *testing.T) {
+	server, roomRepo := newTestServer(t)
+
+	conn := dialRoom(t, server, "COMBAT1")
+	joinRoom(t, conn, "Alice", domain.CharacterTank)
+	room, ok := roomRepo.Get("COMBAT1")
+	if !ok {
+		t.Fatal("room was not created")
+	}
+	if _, err := room.SpawnZombie(domain.ZombieID("z1"), 0, 30, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	attack := []byte(`{"type":"attack"}`)
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+	if err := conn.Write(ctx, websocket.MessageText, attack); err != nil {
+		t.Fatalf("write attack: %v", err)
+	}
+	raw := readMessage(t, conn)
+	var update testStateUpdateMessage
+	if err := json.Unmarshal(raw, &update); err != nil {
+		t.Fatalf("unmarshal state update: %v (raw=%s)", err, raw)
+	}
+	if len(update.Zombies) != 1 || update.Zombies[0].Health != 25 {
+		t.Fatalf("zombies after first attack = %+v, want z1 with health 25", update.Zombies)
+	}
+
+	if err := conn.Write(ctx, websocket.MessageText, attack); err != nil {
+		t.Fatalf("write second attack: %v", err)
+	}
+	raw = readMessage(t, conn)
+	var score scoreUpdateMessage
+	if err := json.Unmarshal(raw, &score); err != nil {
+		t.Fatalf("unmarshal score update: %v (raw=%s)", err, raw)
+	}
+	if score.Type != "score_update" || len(score.Players) != 1 || score.Players[0].Kills != 1 {
+		t.Fatalf("score update = %+v, want one kill for Alice", score)
+	}
+	raw = readMessage(t, conn)
+	if err := json.Unmarshal(raw, &update); err != nil {
+		t.Fatalf("unmarshal second state update: %v (raw=%s)", err, raw)
+	}
+	if len(update.Zombies) != 1 || !update.Zombies[0].Dead || update.Zombies[0].Health != 0 {
+		t.Errorf("zombies after second attack = %+v, want z1 marked dead with zero health", update.Zombies)
 	}
 }
 

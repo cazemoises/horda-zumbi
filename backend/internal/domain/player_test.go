@@ -81,4 +81,17 @@ func TestPlayer_Move_ClampsInputToUnitVector(t *testing.T) {
 	if p.X != 1 || p.Y != -1 {
 		t.Errorf("position = (%v, %v), want (1, -1)", p.X, p.Y)
 	}
+
+}
+
+func TestPlayer_Move_BlocksBuildingsAndSlidesAlongWall(t *testing.T) {
+	var collisionMap CollisionMap
+	collisionMap.blocked[248][250] = true
+	p, _ := NewPlayer(PlayerID("p1"), "Alice", CharacterTank)
+	p.X, p.Y = -1, -17
+
+	p.Move(1, 1, collisionMap)
+	if p.X != -1 || p.Y != -16 {
+		t.Errorf("position after blocked X = (%v, %v), want (-1, -16)", p.X, p.Y)
+	}
 }

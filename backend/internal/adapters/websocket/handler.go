@@ -65,9 +65,24 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			conn.Close(websocket.StatusNormalClosure, "")
 			return
 		}
-		var move moveMessage
-		if err := json.Unmarshal(message, &move); err == nil && move.Type == "move" {
+		var command struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(message, &command); err != nil {
+			h.hub.Broadcast(code, id, message)
+			continue
+		}
+		switch command.Type {
+		case "move":
+			var move moveMessage
+			if err := json.Unmarshal(message, &move); err != nil {
+				h.hub.Broadcast(code, id, message)
+				continue
+			}
 			h.hub.Move(code, id, move.DX, move.DY)
+			continue
+		case "attack":
+			h.hub.Attack(code, id)
 			continue
 		}
 		h.hub.Broadcast(code, id, message)

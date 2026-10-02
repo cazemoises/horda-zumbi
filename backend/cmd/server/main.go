@@ -6,10 +6,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"horda-zumbi/backend/internal/adapters/httpserver"
 	"horda-zumbi/backend/internal/adapters/memory"
 	wsadapter "horda-zumbi/backend/internal/adapters/websocket"
+	"horda-zumbi/backend/internal/domain"
 )
 
 func main() {
@@ -19,7 +21,15 @@ func main() {
 	}
 
 	roomRepo := memory.NewRoomRepository()
-	hub := wsadapter.NewHub(roomRepo)
+	mapData, err := loadMap()
+	if err != nil {
+		log.Fatalf("load collision map: %v", err)
+	}
+	collisionMap, err := domain.LoadCollisionMap(mapData)
+	if err != nil {
+		log.Fatalf("parse collision map: %v", err)
+	}
+	hub := wsadapter.NewHub(roomRepo, collisionMap)
 	wsHandler := wsadapter.NewHandler(hub)
 
 	server := httpserver.NewServer(wsHandler)
@@ -28,4 +38,18 @@ func main() {
 	if err := http.ListenAndServe(":"+port, server); err != nil {
 		log.Fatalf("server stopped: %v", err)
 	}
+}
+
+func loadMap() ([]byte, error) {
+	paths := []string{
+		filepath.Join("frontend", "src", "assets", "tiles", "urban-kit", "map.json"),
+		filepath.Join("..", "frontend", "src", "assets", "tiles", "urban-kit", "map.json"),
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			return data, nil
+		}
+	}
+	return nil, os.ErrNotExist
 }

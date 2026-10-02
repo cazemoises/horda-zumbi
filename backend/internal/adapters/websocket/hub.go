@@ -7,6 +7,7 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"sort"
 	"sync"
 	"time"
@@ -23,20 +24,26 @@ const tickInterval = 33 * time.Millisecond
 // Hub tracks connected clients, applies movement input, and runs each room's
 // fixed-rate state update loop. It implements ports.Broadcaster.
 type Hub struct {
-	mu       sync.RWMutex
-	rooms    map[string]map[ports.ClientID]*websocket.Conn
-	roomLoop map[string]chan struct{}
-	versions map[string]uint64
-	roomRepo ports.RoomRepository
+	mu           sync.RWMutex
+	rooms        map[string]map[ports.ClientID]*websocket.Conn
+	roomLoop     map[string]chan struct{}
+	versions     map[string]uint64
+	roomRepo     ports.RoomRepository
+	collisionMap domain.CollisionMap
 }
 
 // NewHub creates a Hub backed by the given room repository.
-func NewHub(roomRepo ports.RoomRepository) *Hub {
+func NewHub(roomRepo ports.RoomRepository, collisionMaps ...domain.CollisionMap) *Hub {
+	var collisionMap domain.CollisionMap
+	if len(collisionMaps) > 0 {
+		collisionMap = collisionMaps[0]
+	}
 	return &Hub{
-		rooms:    make(map[string]map[ports.ClientID]*websocket.Conn),
-		roomLoop: make(map[string]chan struct{}),
-		versions: make(map[string]uint64),
-		roomRepo: roomRepo,
+		rooms:        make(map[string]map[ports.ClientID]*websocket.Conn),
+		roomLoop:     make(map[string]chan struct{}),
+		versions:     make(map[string]uint64),
+		roomRepo:     roomRepo,
+		collisionMap: collisionMap,
 	}
 }
 
@@ -52,6 +59,7 @@ func (h *Hub) Join(code string, id ports.ClientID, conn *websocket.Conn, name st
 	defer h.mu.Unlock()
 
 	room := h.roomRepo.GetOrCreate(code)
+	room.SetCollisionMap(h.collisionMap)
 
 	player, err := domain.NewPlayer(domain.PlayerID(id), name, character)
 	if err != nil {
@@ -179,10 +187,14 @@ func (h *Hub) stateUpdate(code string) ([]byte, []*websocket.Conn, uint64) {
 	zombies := make([]zombieView, 0, len(room.Zombies))
 	for _, zombie := range room.Zombies {
 		zombies = append(zombies, zombieView{
-			ID:     string(zombie.ID),
-			X:      zombie.X,
-			Y:      zombie.Y,
-			Health: zombie.Health,
+			ID:        string(zombie.ID),
+			Type:      zombie.Type,
+			X:         zombie.X,
+			Y:         zombie.Y,
+			Health:    zombie.Health,
+			Attacking: zombie.Attacking,
+			Hurt:      zombie.Hurt,
+			Dead:      zombie.Dead,
 		})
 	}
 	sort.Slice(zombies, func(i, j int) bool { return zombies[i].ID < zombies[j].ID })
@@ -228,8 +240,51 @@ func (h *Hub) Move(code string, id ports.ClientID, dx, dy int) {
 	if !ok {
 		return
 	}
-	player.Move(dx, dy)
+	player.Move(dx, dy, h.collisionMap)
 	h.versions[code]++
+}
+
+// Attack resolves a player's melee attack against the room's zombies.
+func (h *Hub) Attack(code string, id ports.ClientID) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	room, ok := h.roomRepo.Get(code)
+	if !ok {
+		return
+	}
+	player, ok := room.Players[domain.PlayerID(id)]
+	if !ok {
+		return
+	}
+	log.Printf("attack received: player=%s position=(%.2f,%.2f)", id, player.X, player.Y)
+	previousKills := player.Kills
+	hitCount := room.Attack(domain.PlayerID(id))
+	if hitCount > 0 {
+		h.versions[code]++
+	}
+	if player.Kills > previousKills {
+		h.broadcastScoreUpdate(code, room)
+	}
+}
+
+func (h *Hub) broadcastScoreUpdate(code string, room *domain.Room) {
+	players := make([]scorePlayerView, 0, len(room.Players))
+	for _, player := range room.Players {
+		players = append(players, scorePlayerView{
+			ID:    string(player.ID),
+			Name:  player.Name,
+			Kills: player.Kills,
+		})
+	}
+	sort.Slice(players, func(i, j int) bool { return players[i].ID < players[j].ID })
+	payload, err := json.Marshal(scoreUpdateMessage{Type: "score_update", Players: players})
+	if err != nil {
+		return
+	}
+	for _, conn := range h.rooms[code] {
+		writeRaw(conn, payload)
+	}
 }
 
 // writeRaw sends payload as a text frame to conn, ignoring write errors -

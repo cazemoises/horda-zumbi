@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"log"
 	"strings"
 )
 
@@ -10,11 +11,14 @@ type PlayerID string
 
 // Player is a participant connected to a room.
 type Player struct {
-	ID        PlayerID
-	Name      string
-	X, Y      float64
-	Health    int
-	Character CharacterID
+	ID         PlayerID
+	Name       string
+	X, Y       float64
+	Health     int
+	Kills      int
+	Character  CharacterID
+	DirectionX int
+	DirectionY int
 }
 
 // ErrEmptyName is returned when a player name is empty or only whitespace.
@@ -33,15 +37,16 @@ func NewPlayer(id PlayerID, name string, character CharacterID) (*Player, error)
 		return nil, ErrInvalidCharacter
 	}
 	return &Player{
-		ID:        id,
-		Name:      name,
-		Health:    100,
-		Character: character,
+		ID:         id,
+		Name:       name,
+		Health:     100,
+		Character:  character,
+		DirectionY: 1,
 	}, nil
 }
 
 // Move updates the player's position by a unit movement vector.
-func (p *Player) Move(dx, dy int) {
+func (p *Player) Move(dx, dy int, maps ...CollisionMap) {
 	if dx > 1 {
 		dx = 1
 	} else if dx < -1 {
@@ -52,8 +57,30 @@ func (p *Player) Move(dx, dy int) {
 	} else if dy < -1 {
 		dy = -1
 	}
-	p.X += float64(dx)
-	p.Y += float64(dy)
+	collisionMap := CollisionMap{}
+	if len(maps) > 0 {
+		collisionMap = maps[0]
+	}
+	candidateX, candidateY := p.X+float64(dx), p.Y+float64(dy)
+	xTileCol, xTileRow := worldToTile(candidateX, p.Y)
+	yTileCol, yTileRow := worldToTile(p.X, candidateY)
+	xBlocked := collisionMap.blockedAt(candidateX, p.Y)
+	yBlocked := collisionMap.blockedAt(p.X, candidateY)
+	log.Printf(
+		"player move: before=(%.2f,%.2f) candidateX=(%.2f,%.2f) tileX=(%d,%d) blockedX=%t candidateY=(%.2f,%.2f) tileY=(%d,%d) blockedY=%t",
+		p.X, p.Y, candidateX, p.Y, xTileCol, xTileRow, xBlocked,
+		p.X, candidateY, yTileCol, yTileRow, yBlocked,
+	)
+	if !xBlocked {
+		p.X += float64(dx)
+	}
+	if !yBlocked {
+		p.Y += float64(dy)
+	}
+	if dx != 0 || dy != 0 {
+		p.DirectionX = dx
+		p.DirectionY = dy
+	}
 }
 
 // TakeDamage reduces the player's health by amount, clamped at 0.
